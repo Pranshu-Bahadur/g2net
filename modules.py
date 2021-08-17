@@ -191,14 +191,14 @@ class Net(nn.Module):
     def __init__(self, nc, dp=0.2):
         super(Net, self).__init__()
         self.init_batch_norm = BatchNormalization2D(3)
-        self.head = nn.Conv2d(in_channels=3,out_channels=24,kernel_size=3, stride=1)
+        self.head = nn.Conv2d(in_channels=1,out_channels=24,kernel_size=3, stride=4)
         self.swish = MemoryEfficientSwish()
         self.bn = BatchNormalization2D(24)
         self.config = [
             (24, 48, 1, 2, 1),
-            (48, 64, 2, 1, 3),
-            (64, 128, 1, 2, 3),
-            (128, 256, 4, 1, 1)
+            (48, 64, 2, 2, 6),
+            (64, 128, 4, 1, 6),
+            (128, 256, 8, 1, 4)
             #(128, 160, 9, 1, 6),
             #(160, 272, 15, 2, 6),
             ]
@@ -206,9 +206,9 @@ class Net(nn.Module):
         for i in range(len(self.config)):
             for j in range(self.config[i][2]):
                 self.stages[i].add_module(str(j+1), MBConv(self.config[i][0], self.config[i][0], 3, 1, 0, self.config[i][4]) if j is not self.config[i][2] - 1 else MBConv(self.config[i][0], self.config[i][1], 1, self.config[i][3], 0, self.config[i][4]))
-        self.final_conv = nn.Sequential(nn.Conv2d(self.config[-1][1], 512, 1, 1), BatchNormalization2D(512), MemoryEfficientSwish())
+        self.final_conv = nn.Sequential(nn.Conv2d(self.config[-1][1], 1024, 1, 1), BatchNormalization2D(1024), MemoryEfficientSwish())
         self.gap = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(512, nc)
+        self.fc = nn.Linear(1024, nc)
     def forward(self, x):
         x = self.head(x)
         x = self.bn(x)
@@ -217,8 +217,22 @@ class Net(nn.Module):
             x = stage(x)
         x = self.final_conv(x)
         x = self.gap(x)
-        x = x.view(-1, 512)
+        x = x.view(-1, 1024)
         x = self.fc(x)
         return x
 
+class LSTMClassifier(nn.Module):
+    def __init__(self, num_classes):
+        super(LSTMClassifier, self).__init__()
+        self.rnn = nn.LSTM(input_size=4096, hidden_size=1024, num_layers=1, batch_first=True, bidirectional=True)
+        self.silu = nn.SiLU()
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Linear(256*3, 1)
 
+    def forward(self, x):
+        self.rnn.flatten_parameters()
+        x, _ = self.rnn(x)
+        x = self.silu(x)
+        x = x.reshape(-1, 256*3)
+        x = self.fc(x)
+        return x

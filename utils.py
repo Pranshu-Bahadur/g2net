@@ -40,7 +40,7 @@ class NumpyImagesCSVDataset(Dataset):
 
     def __getitem__(self, index : int):
         data = self.df.iloc[index].to_dict()
-        waves = from_numpy(hstack(load(data['path'])))
+        waves = from_numpy(hstack(load(data['path'])))#hstack(l
         waves /= waves.max()
         x = waves.float()
         y = tensor(data['target']) if self.is_train else tensor(0)
